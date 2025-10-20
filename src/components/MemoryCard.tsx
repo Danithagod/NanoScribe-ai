@@ -22,12 +22,12 @@ export const MemoryCard = ({ memory, onClick }: MemoryCardProps) => {
   
   return (
     <Card 
-      className="group hover:border-primary/50 transition-all duration-300 hover:shadow-glow cursor-pointer animate-slide-in"
+      className="group hover:border-white/30 transition-all duration-300 hover:shadow-glow cursor-pointer animate-slide-in bg-white/5 backdrop-blur-xl border-white/10"
       onClick={onClick}
     >
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-base font-semibold line-clamp-2 group-hover:text-primary transition-colors">
+          <CardTitle className="text-base font-semibold line-clamp-2 group-hover:text-foreground transition-colors">
             {memory.title}
           </CardTitle>
           <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -47,7 +47,7 @@ export const MemoryCard = ({ memory, onClick }: MemoryCardProps) => {
               <Badge 
                 key={idx} 
                 variant="secondary" 
-                className="text-xs px-2 py-0 h-5"
+                className="text-xs px-2 py-0 h-5 bg-white/10 backdrop-blur-xl border-white/20"
               >
                 {tag}
               </Badge>

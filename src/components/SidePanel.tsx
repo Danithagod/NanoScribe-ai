@@ -19,12 +19,12 @@ export const SidePanel = ({ memories, onMemoryClick }: SidePanelProps) => {
   );
 
   return (
-    <div className="h-screen w-full bg-card border-r border-border flex flex-col">
+    <div className="h-screen w-full bg-background/60 backdrop-blur-2xl border-r border-white/10 flex flex-col">
       {/* Header */}
-      <div className="p-4 border-b border-border">
+      <div className="p-4 border-b border-white/10">
         <div className="flex items-center gap-2 mb-4">
-          <div className="p-2 bg-gradient-primary rounded-lg shadow-glow">
-            <Sparkles className="h-5 w-5 text-primary-foreground" />
+          <div className="p-2 bg-white/10 backdrop-blur-xl rounded-lg border border-white/20 shadow-glow">
+            <Sparkles className="h-5 w-5 text-foreground" />
           </div>
           <div>
             <h2 className="text-lg font-bold">Semantic Recall</h2>
@@ -39,7 +39,7 @@ export const SidePanel = ({ memories, onMemoryClick }: SidePanelProps) => {
             placeholder="Search memories..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 bg-background/50 border-border focus-visible:ring-primary"
+            className="pl-10 bg-white/5 backdrop-blur-xl border-white/10 focus:border-white/30 focus:bg-white/10"
           />
         </div>
       </div>

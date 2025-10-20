@@ -83,12 +83,12 @@ export const Editor = () => {
   }, []);
 
   return (
-    <div className="relative h-full flex flex-col">
+    <div className="relative h-full flex flex-col bg-background/40 backdrop-blur-2xl">
       {/* Header */}
-      <div className="p-6 border-b border-border">
+      <div className="p-6 border-b border-white/10">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-gradient-accent rounded-lg shadow-accent-glow">
-            <Lightbulb className="h-5 w-5 text-accent-foreground" />
+          <div className="p-2 bg-white/10 backdrop-blur-xl rounded-lg border border-white/20 shadow-glow">
+            <Lightbulb className="h-5 w-5 text-foreground" />
           </div>
           <div>
             <h1 className="text-2xl font-bold">NanoScribe Editor</h1>
@@ -106,21 +106,21 @@ export const Editor = () => {
           value={content}
           onChange={handleTextChange}
           placeholder="Start writing... Your semantic memories will help guide your thoughts."
-          className="w-full h-full p-6 bg-card rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-primary resize-none text-base leading-relaxed"
+          className="w-full h-full p-6 bg-white/5 backdrop-blur-xl rounded-lg border border-white/10 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/30 resize-none text-base leading-relaxed placeholder:text-muted-foreground"
         />
 
         {/* Suggestion Popover */}
         {suggestion.visible && (
           <Card 
-            className="absolute bg-primary/10 backdrop-blur-sm border-primary/30 p-4 max-w-md animate-slide-in shadow-glow"
+            className="absolute bg-white/10 backdrop-blur-2xl border-white/20 p-4 max-w-md animate-slide-in shadow-glow"
             style={{
               top: `${cursorPosition.top + 120}px`,
               left: `${cursorPosition.left + 24}px`,
             }}
           >
             <div className="flex items-start gap-3">
-              <div className="p-2 bg-primary rounded-lg shrink-0 animate-glow-pulse">
-                <Sparkles className="h-4 w-4 text-primary-foreground" />
+              <div className="p-2 bg-white/20 backdrop-blur-xl rounded-lg shrink-0 border border-white/30 animate-glow-pulse">
+                <Sparkles className="h-4 w-4 text-foreground" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm mb-3">{suggestion.text}</p>
@@ -128,7 +128,7 @@ export const Editor = () => {
                   <Button
                     size="sm"
                     onClick={acceptSuggestion}
-                    className="bg-primary hover:bg-primary/90"
+                    className="bg-white/20 backdrop-blur-xl hover:bg-white/30 border border-white/30"
                   >
                     Accept
                   </Button>
@@ -136,7 +136,7 @@ export const Editor = () => {
                     size="sm"
                     variant="ghost"
                     onClick={dismissSuggestion}
-                    className="text-muted-foreground"
+                    className="text-muted-foreground hover:bg-white/10"
                   >
                     Dismiss
                   </Button>
@@ -148,11 +148,11 @@ export const Editor = () => {
       </div>
 
       {/* Status Bar */}
-      <div className="px-6 py-3 border-t border-border bg-card/50 backdrop-blur-sm">
+      <div className="px-6 py-3 border-t border-white/10 bg-white/5 backdrop-blur-xl">
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>{content.split(/\s+/).filter(Boolean).length} words</span>
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+            <div className="w-2 h-2 rounded-full bg-white/60 animate-pulse" />
             <span>AI assistance active</span>
           </div>
         </div>
