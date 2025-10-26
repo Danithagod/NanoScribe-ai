@@ -282,13 +282,18 @@ export async function proofreadText(input: string): Promise<ProofreaderResult | 
     // Convert modern API result to our internal format
     const result: ProofreaderResult = {
       corrected: raw.correctedInput,
-      corrections: raw.corrections.map(correction => ({
-        startIndex: correction.startIndex,
-        endIndex: correction.endIndex,
-        correction: correction.correction,
-        type: correction.type,
-        explanation: correction.explanation
-      }))
+      corrections: raw.corrections.map(correction => {
+        // Calculate the replacement text based on the indices
+        const replacement = input.slice(correction.startIndex, correction.endIndex);
+        return {
+          startIndex: correction.startIndex,
+          endIndex: correction.endIndex,
+          replacement: replacement,
+          correction: correction.correction,
+          type: correction.type,
+          explanation: correction.explanation
+        };
+      })
     };
 
     console.log(`${LOG_PREFIX} Proofreader normalized result:`, result);

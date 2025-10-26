@@ -7,10 +7,13 @@ import { generateCompletionFromPrompt, isLanguageModelReady, rankMemoriesWithPro
 import { isProofreaderReady, proofreadText } from "./background/proofreader";
 import { addModelStatusListener, getModelStatuses, updateModelStatus } from "./background/model-status";
 import type { AutocompleteState, CompletionResultPayload, MemoryRecord, ProofreaderFieldResult } from "./types";
+import type { BackgroundResponse } from "./messaging";
 
 export type ExtensionRuntimeMessage =
   | { type: "PING" }
   | { type: "SIDEPANEL_READY" }
+  | { type: "SIDEPANEL_OPENED" }
+  | { type: "SIDEPANEL_CLOSED" }
   | { type: "GET_MEMORIES" }
   | { type: "SEARCH_MEMORIES"; query: string }
   | { type: "RUN_PROOFREADER_ON_ACTIVE_FIELD" }
@@ -22,7 +25,11 @@ export type ExtensionRuntimeMessage =
   | { type: "AUTOCOMPLETE_STATE_PUSH"; payload: AutocompleteState }
   | { type: "INVOKE_LANGUAGE_MODEL" }
   | { type: "INVOKE_PROOFREADER" }
-  | { type: "INVOKE_SUMMARIZER" };
+  | { type: "TEST_COMPLETION" }
+  | { type: "INVOKE_SUMMARIZER" }
+  | { type: "OPEN_PROOFREADER"; payload: { text: string; sessionId?: string } }
+  | { type: "APPLY_PROOFREADER_CORRECTIONS"; payload: { correctedText: string; originalText: string; sessionId?: string } }
+  | { type: "APPLY_SINGLE_CORRECTION"; payload: { correctedText: string; originalText: string; sessionId?: string } };
 
 type PendingSummary = {
   tabId: number;
@@ -36,6 +43,9 @@ const MIN_CONTENT_LENGTH = 300;
 const DUPLICATE_COOLDOWN_MS = 1000 * 60 * 60 * 6; // 6 hours
 
 const pendingSummaries = new Map<string, PendingSummary>();
+
+// Track sidepanel state
+let isSidepanelOpen = false;
 
 let autocompleteState: AutocompleteState = {
   status: "idle",
@@ -113,11 +123,6 @@ function clearPendingSummary(tabId: number) {
   chrome.alarms.clear(alarmName);
 }
 
-async function ensureSummarizerReady() {
-  summarizerStatus.ready = await isSummarizerReady();
-  return summarizerStatus.ready;
-}
-
 function fallbackSummarize(text: string): string {
   const sentences = text
     .split(/(?<=[.!?])\s+/)
@@ -127,6 +132,61 @@ function fallbackSummarize(text: string): string {
     return text.slice(0, 500);
   }
   return `- ${sentences.join("\n- ")}`;
+}
+
+async function ensureSummarizerReady() {
+  summarizerStatus.ready = await isSummarizerReady();
+  return summarizerStatus.ready;
+}
+
+async function applyCorrection(
+  payload: { correctedText: string; originalText: string; sessionId?: string },
+  messageType: "APPLY_PROOFREADER_CORRECTIONS" | "APPLY_SINGLE_CORRECTION",
+  successType: "CORRECTIONS_APPLIED" | "CORRECTION_APPLIED",
+  logMessage: string,
+  sendResponse: (response: BackgroundResponse) => void
+) {
+  try {
+    const { correctedText, originalText, sessionId } = payload;
+    console.log(`${LOG_PREFIX} 📝 ${logMessage}`);
+
+    // Find the active tab and send message to content script
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab?.id) {
+      chrome.tabs.sendMessage(
+        tab.id,
+        {
+          type: messageType,
+          payload: { correctedText, originalText, sessionId }
+        },
+        (response) => {
+          const lastError = chrome.runtime.lastError;
+          if (lastError) {
+            console.warn(`${LOG_PREFIX} Failed to apply correction`, lastError.message);
+            sendResponse({ type: "ERROR", message: lastError.message });
+            return;
+          }
+
+          if (response?.ok) {
+            console.log(`${LOG_PREFIX} ✅ Correction applied successfully`);
+            // Note: Chrome's sidePanel API doesn't have a close method, so we only update state
+            // The sidepanel will close automatically when corrections are applied in the content script
+            isSidepanelOpen = false;
+            broadcast({ type: "SIDEPANEL_CLOSED" });
+            sendResponse({ type: successType, message: response.message });
+          } else {
+            console.error(`${LOG_PREFIX} ❌ Failed to apply correction:`, response?.message);
+            sendResponse({ type: "ERROR", message: response?.message || "Failed to apply correction" });
+          }
+        }
+      );
+    } else {
+      sendResponse({ type: "ERROR", message: "No active tab found" });
+    }
+  } catch (error) {
+    console.error(`${LOG_PREFIX} Error in ${messageType}:`, error);
+    sendResponse({ type: "ERROR", message: error instanceof Error ? error.message : String(error) });
+  }
 }
 
 async function handleSummarizeAlarm(alarmName: string) {
@@ -247,24 +307,12 @@ chrome.runtime.onInstalled.addListener((details) => {
     console.info(`${LOG_PREFIX} Extension updated to a new version.`);
   }
 
-  if (chrome.sidePanel?.setPanelBehavior) {
-    chrome.sidePanel
-      .setPanelBehavior({ openPanelOnActionClick: true })
-      .catch((error) => console.warn(`${LOG_PREFIX} Failed to set side panel behavior`, error));
-  }
-
   ensureSummarizerReady().catch((error) => {
     console.warn(`${LOG_PREFIX} Summarizer warmup failed on install`, error);
   });
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  if (chrome.sidePanel?.setPanelBehavior) {
-    chrome.sidePanel
-      .setPanelBehavior({ openPanelOnActionClick: true })
-      .catch((error) => console.warn(`${LOG_PREFIX} Failed to set side panel behavior on startup`, error));
-  }
-
   ensureSummarizerReady().catch((error) => {
     console.warn(`${LOG_PREFIX} Summarizer warmup failed on startup`, error);
   });
@@ -281,6 +329,49 @@ chrome.runtime.onMessage.addListener((message: ExtensionRuntimeMessage, _sender,
       sendResponse({ type: "ACK" });
       broadcast({ type: "MODEL_STATUS_CHANGED", payload: getModelStatuses() });
       broadcastAutocompleteState();
+      return true;
+    }
+    case "SIDEPANEL_OPENED": {
+      console.info(`${LOG_PREFIX} Side panel opened.`);
+      broadcast({ type: "SIDEPANEL_OPENED" });
+      sendResponse({ type: "ACK" });
+      return true;
+    }
+    case "OPEN_PROOFREADER": {
+      ;(async () => {
+        try {
+          const { text, sessionId } = message.payload;
+          console.log(`${LOG_PREFIX} 📱 Opening proofreader for text: "${text.slice(0, 50)}${text.length > 50 ? '...' : ''}"`);
+
+          // Open the sidepanel programmatically
+          const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+          if (tab?.windowId) {
+            await chrome.sidePanel.open({ windowId: tab.windowId });
+            isSidepanelOpen = true;
+            console.log(`${LOG_PREFIX} 📱 Sidepanel opened successfully`);
+            broadcast({ type: "SIDEPANEL_OPENED" });
+
+            // Broadcast proofreader state update
+            broadcast({
+              type: "PROOFREADER_STATE_UPDATED",
+              payload: {
+                text,
+                isVisible: true,
+                isLoading: true,
+                corrections: [],
+                error: null,
+                sessionId,
+                correctedText: null
+              }
+            });
+          }
+
+          sendResponse({ type: "ACK" });
+        } catch (error) {
+          console.error(`${LOG_PREFIX} Failed to open sidepanel:`, error);
+          sendResponse({ type: "ERROR", message: error instanceof Error ? error.message : String(error) });
+        }
+      })();
       return true;
     }
     case "GET_MEMORIES": {
@@ -330,8 +421,10 @@ chrome.runtime.onMessage.addListener((message: ExtensionRuntimeMessage, _sender,
       return true;
     }
     case "REQUEST_COMPLETION": {
+      console.log(`${LOG_PREFIX} 🎯 REQUEST_COMPLETION case reached!`);
       ;(async () => {
         try {
+          console.log(`${LOG_PREFIX} 🚀 Starting REQUEST_COMPLETION processing...`);
           const payload = message.payload;
           console.debug(`${LOG_PREFIX} Completion request`, payload);
 
@@ -352,12 +445,29 @@ chrome.runtime.onMessage.addListener((message: ExtensionRuntimeMessage, _sender,
             return;
           }
 
+          console.log(`${LOG_PREFIX} ✅ Language model is ready, proceeding with completion generation...`);
+
           let contextSummary: string | undefined;
           try {
-            const memories = await getAllMemories();
+            console.log(`${LOG_PREFIX} 📚 Getting memories for context...`);
+
+            // Add timeout protection for memory retrieval
+            const memoryPromise = getAllMemories();
+            const memoryTimeoutPromise = new Promise<never>((_, reject) => {
+              setTimeout(() => {
+                console.warn(`${LOG_PREFIX} ⚠️ Memory retrieval timed out after 3 seconds, proceeding without context`);
+                reject(new Error("Memory retrieval timeout"));
+              }, 3000);
+            });
+
+            const memories = await Promise.race([memoryPromise, memoryTimeoutPromise]);
+            console.log(`${LOG_PREFIX} 📚 Found ${memories.length} memories, checking if memory ranking needed...`);
+
             if (memories.length > 0) {
+              console.log(`${LOG_PREFIX} 📚 Ranking memories with prompt...`);
               const rankedIds = await rankMemoriesWithPrompt(payload.text, memories);
               if (rankedIds && rankedIds.length > 0) {
+                console.log(`${LOG_PREFIX} 📚 Found ${rankedIds.length} relevant memories, building context summary...`);
                 const relevant = rankedIds
                   .map((id) => memories.find((memory) => memory.id === id))
                   .filter((memory): memory is MemoryRecord => Boolean(memory))
@@ -365,17 +475,25 @@ chrome.runtime.onMessage.addListener((message: ExtensionRuntimeMessage, _sender,
                   .map((memory) => `- ${memory.title}: ${memory.summary}`);
                 if (relevant.length > 0) {
                   contextSummary = relevant.join("\n");
+                  console.log(`${LOG_PREFIX} 📚 Context summary built:`, contextSummary.length, "characters");
                 }
+              } else {
+                console.log(`${LOG_PREFIX} 📚 No relevant memories found`);
               }
+            } else {
+              console.log(`${LOG_PREFIX} 📚 No memories available for context`);
             }
           } catch (error) {
-            console.debug(`${LOG_PREFIX} Unable to incorporate memory context`, error);
+            console.warn(`${LOG_PREFIX} ⚠️ Memory context retrieval failed or timed out, proceeding without context:`, error);
+            // Continue without memory context - it's optional
           }
 
+          // Generate completion without timeout since it's working
           const completion = await generateCompletionFromPrompt({
             text: payload.text,
             contextSummary,
           });
+          console.log("[NanoScribe] Completion generation finished, result:", completion);
 
           const result: CompletionResultPayload = {
             requestId: payload.requestId,
@@ -572,6 +690,48 @@ chrome.runtime.onMessage.addListener((message: ExtensionRuntimeMessage, _sender,
       })();
       return true;
     }
+    case "TEST_COMPLETION": {
+      console.log(`${LOG_PREFIX} 🧪 TEST_COMPLETION case reached!`);
+      ;(async () => {
+        try {
+          console.log("[NanoScribe] 🧪 Testing completion generation directly...");
+          const testText = "There are my types of cars are muscle";
+
+          const completion = await generateCompletionFromPrompt({
+            text: testText,
+          });
+
+          console.log("[NanoScribe] ✅ Test completion result:", completion);
+          sendResponse({ type: "ACK", message: `Test completion: ${completion || 'null'}` });
+        } catch (error) {
+          console.error("[NanoScribe] ❌ Test completion failed:", error);
+          sendResponse({ type: "ERROR", message: String(error) });
+        }
+      })();
+      return true;
+    }
+
+    case "APPLY_PROOFREADER_CORRECTIONS": {
+      applyCorrection(
+        message.payload,
+        "APPLY_PROOFREADER_CORRECTIONS",
+        "CORRECTIONS_APPLIED",
+        "Applying all corrections",
+        sendResponse
+      );
+      return true;
+    }
+
+    case "APPLY_SINGLE_CORRECTION": {
+      applyCorrection(
+        message.payload,
+        "APPLY_SINGLE_CORRECTION",
+        "CORRECTION_APPLIED",
+        "Applying single correction",
+        sendResponse
+      );
+      return true;
+    }
 
     default: {
       return false;
@@ -605,11 +765,26 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   clearPendingSummary(tabId);
 });
 
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (!alarm?.name.startsWith("nanoscribe::summarize::")) return;
-  handleSummarizeAlarm(alarm.name).catch((error) => {
-    console.error(`${LOG_PREFIX} Failed to process alarm`, error);
-  });
-});
+chrome.action.onClicked.addListener(async (tab) => {
+  if (!tab?.id) return;
 
-export {};
+  console.log(`${LOG_PREFIX} Extension action clicked`);
+
+  if (isSidepanelOpen) {
+    // Reset sidepanel state when user clicks extension action while sidepanel is open
+    // Note: The sidepanel closes automatically when corrections are applied in the content script
+    isSidepanelOpen = false;
+    console.log(`${LOG_PREFIX} 📱 Sidepanel state reset via action click`);
+    broadcast({ type: "SIDEPANEL_CLOSED" });
+  } else {
+    // Open the sidepanel
+    try {
+      await chrome.sidePanel.open({ windowId: tab.windowId });
+      isSidepanelOpen = true;
+      console.log(`${LOG_PREFIX} 📱 Sidepanel opened via action click`);
+      broadcast({ type: "SIDEPANEL_OPENED" });
+    } catch (error) {
+      console.warn(`${LOG_PREFIX} Failed to open sidepanel:`, error);
+    }
+  }
+});

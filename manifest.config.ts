@@ -33,7 +33,7 @@ export default function createManifest({ mode }: ManifestFactoryOptions) {
       service_worker: "src/extension/service-worker.ts",
       type: "module",
     },
-    permissions: ["storage", "tabs", "scripting", "alarms", "sidePanel", "aiLanguageModel", "aiSummarizer"],
+    permissions: ["storage", "tabs", "scripting", "alarms", "sidePanel", "aiLanguageModel"],
     host_permissions: ["<all_urls>"],
     side_panel: {
       default_path: "src/extension/sidepanel/index.html",

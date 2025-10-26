@@ -1,5 +1,12 @@
 import type { ContentChunkRecord, MemoryRecord } from "../types";
 
+// Extend IndexedDB types to include oldVersion property
+declare global {
+  interface IDBOpenDBRequest {
+    oldVersion: number;
+  }
+}
+
 const DATABASE_NAME = "nanoscribe-memories";
 const DATABASE_VERSION = 2;
 const STORE_NAME = "memories";
@@ -29,22 +36,34 @@ async function resetDatabase(currentDb?: IDBDatabase): Promise<void> {
 }
 
 function openDatabase(): Promise<IDBDatabase> {
-  if (databasePromise) return databasePromise;
+  console.log("[NanoScribe::Memory] 🔍 openDatabase() CALLED");
 
+  if (databasePromise) {
+    console.log("[NanoScribe::Memory] ✅ Using existing database promise");
+    return databasePromise;
+  }
+
+  console.log("[NanoScribe::Memory] 🔄 Creating new database promise...");
   databasePromise = new Promise((resolve, reject) => {
+    console.log("[NanoScribe::Memory] 🔄 Creating IndexedDB.open() request...");
     const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
 
     request.onupgradeneeded = () => {
+      console.log("[NanoScribe::Memory] 🔄 Database upgrade needed");
       const db = request.result;
 
-      if (request.oldVersion < 1) {
+      const oldVersion = request.oldVersion || 0;
+
+      if (oldVersion < 1) {
+        console.log("[NanoScribe::Memory] 🔄 Creating memories store...");
         const store = db.createObjectStore(STORE_NAME, { keyPath: "id" });
         store.createIndex("by-url", "url", { unique: true });
         store.createIndex("by-createdAt", "createdAt", { unique: false });
       }
 
-      if (request.oldVersion < 2) {
+      if (oldVersion < 2) {
         if (!db.objectStoreNames.contains(CHUNK_STORE_NAME)) {
+          console.log("[NanoScribe::Memory] 🔄 Creating content chunks store...");
           const chunkStore = db.createObjectStore(CHUNK_STORE_NAME, { keyPath: "id" });
           chunkStore.createIndex("by-memoryId", "memoryId", { unique: false });
           chunkStore.createIndex("by-createdAt", "createdAt", { unique: false });
@@ -53,43 +72,72 @@ function openDatabase(): Promise<IDBDatabase> {
     };
 
     request.onsuccess = () => {
+      console.log("[NanoScribe::Memory] ✅ IndexedDB opened successfully");
       const db = request.result;
 
       const hasStores =
         db.objectStoreNames.contains(STORE_NAME) && db.objectStoreNames.contains(CHUNK_STORE_NAME);
 
       if (!hasStores) {
+        console.log("[NanoScribe::Memory] ⚠️ Missing stores, resetting database...");
         resetDatabase(db)
           .then(() => openDatabase().then(resolve, reject))
           .catch(reject);
         return;
       }
 
-      db.onversionchange = () => db.close();
+      db.onversionchange = () => {
+        console.log("[NanoScribe::Memory] 🔄 Database version changed, closing...");
+        db.close();
+      };
       resolve(db);
     };
-    request.onerror = () => reject(request.error);
+    request.onerror = () => {
+      console.error("[NanoScribe::Memory] ❌ IndexedDB open failed:", request.error);
+      reject(request.error);
+    };
   });
 
   return databasePromise;
 }
 
 function promisifyRequest<T>(request: IDBRequest<T>): Promise<T> {
+  console.log("[NanoScribe::Memory] 🔄 promisifyRequest() CALLED for", request);
+
   return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      console.log("[NanoScribe::Memory] ✅ IDB request succeeded");
+      resolve(request.result);
+    };
+    request.onerror = () => {
+      console.error("[NanoScribe::Memory] ❌ IDB request failed:", request.error);
+      reject(request.error);
+    };
   });
 }
 
 async function getStore(mode: IDBTransactionMode = "readonly") {
+  console.log("[NanoScribe::Memory] 🔍 getStore() CALLED with mode:", mode);
+
   try {
+    console.log("[NanoScribe::Memory] 🔍 Calling openDatabase()...");
     const db = await openDatabase();
+    console.log("[NanoScribe::Memory] ✅ Database opened successfully");
+
+    console.log("[NanoScribe::Memory] 🔍 Creating transaction...");
     const transaction = db.transaction(STORE_NAME, mode);
+    console.log("[NanoScribe::Memory] ✅ Transaction created");
+
     const store = transaction.objectStore(STORE_NAME);
+    console.log("[NanoScribe::Memory] ✅ Store obtained");
+
     return { transaction, store };
   } catch (error) {
+    console.error("[NanoScribe::Memory] ❌ getStore() failed:", error);
     if (error instanceof DOMException && error.name === "NotFoundError") {
+      console.log("[NanoScribe::Memory] 🔄 Database not found, resetting...");
       await resetDatabase();
+      console.log("[NanoScribe::Memory] ✅ Database reset, retrying...");
       const db = await openDatabase();
       const transaction = db.transaction(STORE_NAME, mode);
       const store = transaction.objectStore(STORE_NAME);
@@ -130,10 +178,26 @@ export async function addOrUpdateMemory(draft: MemoryDraft): Promise<MemoryRecor
 }
 
 export async function getAllMemories(): Promise<MemoryRecord[]> {
-  const { store } = await getStore("readonly");
-  const request = store.index("by-createdAt").getAll();
-  const results = await promisifyRequest(request);
-  return results.sort((a, b) => b.createdAt - a.createdAt);
+  console.log("[NanoScribe::Memory] 🔍 getAllMemories() CALLED");
+
+  try {
+    console.log("[NanoScribe::Memory] 🔍 Opening database and getting store...");
+    const { store } = await getStore("readonly");
+    console.log("[NanoScribe::Memory] ✅ Store obtained, getting all records...");
+
+    const request = store.index("by-createdAt").getAll();
+    console.log("[NanoScribe::Memory] 🔄 IndexedDB getAll() request created, waiting for results...");
+
+    const results = await promisifyRequest(request);
+    console.log("[NanoScribe::Memory] ✅ IndexedDB request completed, got", results.length, "records");
+
+    const sorted = results.sort((a, b) => b.createdAt - a.createdAt);
+    console.log("[NanoScribe::Memory] ✅ Records sorted, returning", sorted.length, "memories");
+    return sorted;
+  } catch (error) {
+    console.error("[NanoScribe::Memory] ❌ getAllMemories() failed:", error);
+    throw error;
+  }
 }
 
 export async function searchMemories(query: string): Promise<MemoryRecord[]> {
