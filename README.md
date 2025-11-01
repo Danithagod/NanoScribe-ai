@@ -2,6 +2,8 @@
 
 # NanoScribe AI – Intelligent On-Device Writing Companion
 
+![NanoScribe Banner](nanoscribe%20Banner.png)
+
 NanoScribe AI is a Manifest V3 Chrome extension that pairs the latest on-device Chrome Prompt APIs with a rich semantic memory system. It helps you draft faster, polish prose, recall past research, and keep everything private on your machine. This README captures the full feature set, how the extension works, and everything you need to build, customize, and ship it.
 
 ## Table of contents
