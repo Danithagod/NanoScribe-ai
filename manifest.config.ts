@@ -26,14 +26,25 @@ export default function createManifest({ mode }: ManifestFactoryOptions) {
     description:
       "Private, offline-first writing assistant with semantic recall and contextual completions.",
     version: packageJson.version ?? "0.0.0",
+    icons: {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png", 
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png",
+    },
     action: {
       default_title: "NanoScribe",
+      default_icon: {
+        "16": "icons/icon-16.png",
+        "32": "icons/icon-32.png",
+        "48": "icons/icon-48.png",
+      },
     },
     background: {
       service_worker: "src/extension/service-worker.ts",
       type: "module",
     },
-    permissions: ["storage", "tabs", "scripting", "alarms", "sidePanel", "aiLanguageModel"],
+    permissions: ["storage", "tabs", "scripting", "alarms", "sidePanel", "aiLanguageModel", "webNavigation", "contextMenus"],
     host_permissions: ["<all_urls>"],
     side_panel: {
       default_path: "src/extension/sidepanel/index.html",

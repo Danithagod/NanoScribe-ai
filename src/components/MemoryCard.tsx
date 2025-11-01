@@ -22,7 +22,7 @@ export const MemoryCard = ({ memory, onClick }: MemoryCardProps) => {
   
   return (
     <Card 
-      className="group hover:border-white/30 transition-all duration-300 hover:shadow-glow cursor-pointer animate-slide-in bg-white/5 backdrop-blur-xl border-white/10"
+      className="group hover:border-white/30 transition-all duration-300 hover:shadow-glow cursor-pointer animate-slide-in bg-white/5 backdrop-blur-xl border-white/10 "
       onClick={onClick}
     >
       <CardHeader className="pb-3">

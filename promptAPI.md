@@ -1,3 +1,4 @@
+<!-- markdownlint-disable -->
 Prompt API Model Usage Summary
 
 Examples

@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NanoScribe Memory Test Page</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+            line-height: 1.6;
+        }
+        .test-section {
+            margin: 2rem 0;
+            padding: 1rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+        }
+        .test-button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .test-button:hover {
+            background: #2563eb;
+        }
+        .status {
+            padding: 0.5rem;
+            border-radius: 4px;
+            margin: 0.5rem 0;
+        }
+        .success { background: #d1fae5; color: #065f46; }
+        .error { background: #fee2e2; color: #991b1b; }
+        .info { background: #e0f2fe; color: #0369a1; }
+        pre {
+            background: #f8fafc;
+            padding: 1rem;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 0.8rem;
+        }
+        .highlight {
+            background: #fef3c7;
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 NanoScribe Memory System Test Page</h1>
+
+    <p>This page is designed to test the NanoScribe AI extension's memory creation and retrieval capabilities. The page contains substantial content that should trigger automatic memory creation when you visit it with the extension enabled.</p>
+
+    <div class="test-section">
+        <h2>📋 Test Instructions</h2>
+        <ol>
+            <li>Ensure the NanoScribe extension is loaded and enabled in Chrome</li>
+            <li>Open the extension popup and verify it's working</li>
+            <li>Navigate to this page - it should automatically trigger memory creation after 20 seconds</li>
+            <li>Check the Memories tab in the sidepanel to see if the memory was created</li>
+            <li>Test autocomplete in the text area below to see if context is working</li>
+        </ol>
+    </div>
+
+    <div class="test-section">
+        <h2>🧠 Memory Creation Test</h2>
+        <p>This page contains detailed information about artificial intelligence, machine learning, and their applications. The extension should automatically:</p>
+        <ul>
+            <li>Extract the main content from this page</li>
+            <li>Summarize it using the AI models</li>
+            <li>Break it into chunks for context</li>
+            <li>Store it in the IndexedDB with proper indexing</li>
+        </ul>
+
+        <div id="memory-status" class="status info">Waiting for memory creation...</div>
+    </div>
+
+    <div class="test-section">
+        <h2>⚡ Quick Tests</h2>
+        <button class="test-button" onclick="testExtensionAPI()">Test Extension API</button>
+        <button class="test-button" onclick="testContextIntegration()">Test Context Integration</button>
+        <button class="test-button" onclick="clearTestMemories()">Clear Test Memories</button>
+
+        <div id="test-results" style="margin-top: 1rem;"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>📝 Context Integration Test</h2>
+        <p>Try typing in the text area below. The extension should provide context-aware completions based on the content of this page:</p>
+
+        <textarea
+            id="test-textarea"
+            placeholder="Start typing about artificial intelligence, machine learning, or any topic from this page..."
+            style="width: 100%; height: 100px; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 4px; font-family: inherit;"
+            oninput="updateAutocomplete()"
+        ></textarea>
+
+        <div id="completion-preview" style="margin-top: 0.5rem; color: #6b7280; font-style: italic;"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>📚 Page Content (For Memory Creation)</h2>
+
+        <h3>What is Artificial Intelligence?</h3>
+        <p>Artificial Intelligence (AI) refers to the simulation of human intelligence in machines that are programmed to think like humans and mimic their actions. The term may also be applied to any machine that exhibits traits associated with a human mind such as learning and problem-solving.</p>
+
+        <p>The ideal characteristic of artificial intelligence is its ability to rationalize and take actions that have the best chance of achieving a specific goal. A subset of artificial intelligence is machine learning, which refers to the concept that computer programs can automatically learn from and adapt to new data without being assisted by humans.</p>
+
+        <h3>Machine Learning Fundamentals</h3>
+        <p>Machine learning is a method of data analysis that automates analytical model building. It is a branch of artificial intelligence based on the idea that systems can learn from data, identify patterns and make decisions with minimal human intervention.</p>
+
+        <p>Deep learning is part of a broader family of machine learning methods based on artificial neural networks with representation learning. Learning can be supervised, semi-supervised or unsupervised.</p>
+
+        <h3>Applications of AI</h3>
+        <p>Artificial intelligence has been used in a wide range of fields including medical diagnosis, stock trading, robot control, law, scientific discovery and toys. AI is a common theme in science fiction, and futuristic ideas such as general AI and superintelligence have been explored in culture.</p>
+
+        <h3>Types of Machine Learning</h3>
+        <p>There are three main types of machine learning:</p>
+        <ul>
+            <li><strong>Supervised Learning:</strong> Uses labeled training data to learn a function that maps input to output</li>
+            <li><strong>Unsupervised Learning:</strong> Finds hidden patterns in data without labeled examples</li>
+            <li><strong>Reinforcement Learning:</strong> Learns through interaction with an environment using rewards and penalties</li>
+        </ul>
+
+        <h3>Benefits and Challenges</h3>
+        <p>AI offers numerous benefits including automation of repetitive tasks, improved decision making, and the ability to process vast amounts of data quickly. However, challenges include ethical concerns, job displacement, and the need for large amounts of quality training data.</p>
+
+        <h3>Future of AI</h3>
+        <p>The future of artificial intelligence holds tremendous promise. As computing power increases and algorithms become more sophisticated, AI systems will become more capable and integrated into our daily lives. However, careful consideration must be given to the ethical implications and societal impact of these powerful technologies.</p>
+    </div>
+
+    <script>
+        let testResults = [];
+
+        async function testExtensionAPI() {
+            const result = document.getElementById('test-results');
+            result.innerHTML = '<div class="status info">Testing extension API...</div>';
+
+            try {
+                // Test if extension is available
+                if (typeof chrome !== 'undefined' && chrome.runtime) {
+                    const response = await new Promise((resolve) => {
+                        chrome.runtime.sendMessage({ type: "PING" }, resolve);
+                    });
+
+                    if (response && response.type === "PONG") {
+                        result.innerHTML = '<div class="status success">✅ Extension API working - service worker responding</div>';
+                        testResults.push('Extension API: PASS');
+                        return true;
+                    } else {
+                        result.innerHTML = '<div class="status error">❌ Service worker not responding</div>';
+                        testResults.push('Extension API: FAIL');
+                        return false;
+                    }
+                } else {
+                    result.innerHTML = '<div class="status error">❌ Chrome APIs not available</div>';
+                    testResults.push('Extension API: FAIL');
+                    return false;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="status error">❌ Test failed: ${error.message}</div>`;
+                testResults.push('Extension API: FAIL');
+                return false;
+            }
+        }
+
+        async function testContextIntegration() {
+            const result = document.getElementById('test-results');
+            result.innerHTML = '<div class="status info">Testing context integration...</div>';
+
+            try {
+                const testText = "The benefits of artificial intelligence";
+                console.log(`Testing completion for: "${testText}"`);
+
+                const response = await new Promise((resolve) => {
+                    chrome.runtime.sendMessage({
+                        type: "REQUEST_COMPLETION",
+                        payload: {
+                            requestId: crypto.randomUUID(),
+                            fieldId: "test-field",
+                            text: testText,
+                            caretIndex: testText.length
+                        }
+                    }, resolve);
+                });
+
+                if (response && response.type === "COMPLETION_RESULT") {
+                    const suggestion = response.payload.suggestion;
+                    if (suggestion && suggestion.length > 0) {
+                        result.innerHTML = `<div class="status success">✅ Context integration working - completion: "${suggestion}"</div>`;
+                        testResults.push('Context Integration: PASS');
+                        return true;
+                    } else {
+                        result.innerHTML = '<div class="status error">❌ No completion generated</div>';
+                        testResults.push('Context Integration: FAIL');
+                        return false;
+                    }
+                } else {
+                    result.innerHTML = '<div class="status error">❌ No completion response</div>';
+                    testResults.push('Context Integration: FAIL');
+                    return false;
+                }
+            } catch (error) {
+                result.innerHTML = `<div class="status error">❌ Context test failed: ${error.message}</div>`;
+                testResults.push('Context Integration: FAIL');
+                return false;
+            }
+        }
+
+        async function clearTestMemories() {
+            const result = document.getElementById('test-results');
+            result.innerHTML = '<div class="status info">Clearing test memories...</div>';
+
+            try {
+                // Note: This would require extension API access
+                result.innerHTML = '<div class="status info">To clear memories, use the sidepanel Settings tab or extension API</div>';
+            } catch (error) {
+                result.innerHTML = `<div class="status error">❌ Clear failed: ${error.message}</div>`;
+            }
+        }
+
+        function updateAutocomplete() {
+            const textarea = document.getElementById('test-textarea');
+            const preview = document.getElementById('completion-preview');
+            const text = textarea.value;
+
+            if (text.length > 10) {
+                preview.innerHTML = 'Type and wait for autocomplete suggestions from the NanoScribe extension...';
+            } else {
+                preview.innerHTML = '';
+            }
+        }
+
+        // Monitor memory creation
+        setInterval(async () => {
+            try {
+                const memories = await new Promise((resolve) => {
+                    chrome.runtime.sendMessage({ type: "GET_MEMORIES" }, (response) => {
+                        if (response && response.type === "MEMORIES") {
+                            resolve(response.payload);
+                        } else {
+                            resolve([]);
+                        }
+                    });
+                });
+
+                const status = document.getElementById('memory-status');
+
+                if (memories.length > 0) {
+                    const exampleMemory = memories.find(m => m.url.includes('nanoscribe-memory-test'));
+                    if (exampleMemory) {
+                        status.className = 'status success';
+                        status.innerHTML = `✅ Memory created successfully! Found ${memories.length} total memories. This page memory: "${exampleMemory.title}"`;
+                    } else {
+                        status.className = 'status info';
+                        status.innerHTML = `📚 Found ${memories.length} memories (from other pages). Waiting for this page memory...`;
+                    }
+                } else {
+                    status.className = 'status info';
+                    status.innerHTML = '📭 No memories found yet. Memory creation may take 20+ seconds after page load.';
+                }
+            } catch (error) {
+                document.getElementById('memory-status').innerHTML = `❌ Error checking memories: ${error.message}`;
+            }
+        }, 5000);
+
+        console.log('🧪 NanoScribe Memory Test Page loaded');
+        console.log('📝 Test the extension by:');
+        console.log('  1. Opening the extension sidepanel');
+        console.log('  2. Checking the Memories tab');
+        console.log('  3. Testing autocomplete in the text area');
+        console.log('  4. Using the test buttons above');
+    </script>
+</body>
+</html>

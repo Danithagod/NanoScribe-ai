@@ -5,6 +5,34 @@ export type MemoryRecord = {
   summary: string;
   createdAt: number;
   updatedAt: number;
+  structuredSummary?: MemoryStructuredSummary;
+};
+
+export type MemoryStructuredSummary = {
+  overview: string;
+  sections: MemorySummarySection[];
+};
+
+export type MemorySummarySection = {
+  ordinal: number;
+  title: string;
+  keyPoints: string;
+  charCount: number;
+};
+
+// Session-based memory grouping
+export type SessionGroup = {
+  sessionId: string;
+  lastActivity: number; // timestamp of most recent memory in session
+  memoryCount: number;
+  memories: MemoryRecord[];
+  title?: string;
+};
+
+// Enhanced memory record with session info
+export type MemoryWithSession = MemoryRecord & {
+  sessionId: string;
+  sessionLastActivity: number;
 };
 
 export type ContentChunkRecord = {
@@ -14,8 +42,32 @@ export type ContentChunkRecord = {
   chunkTitle?: string;
   rawText: string;
   keyPoints: string;
+  keywords: string[];
   ordinal: number;
   createdAt: number;
+  sourceTag?: string; // New field to indicate chunk source (readability, manual, etc.)
+};
+
+export type MemorySearchResult = {
+  chunk: ContentChunkRecord;
+  memory: MemoryRecord | null;
+};
+
+export type AskContextItem = {
+  chunkId: string;
+  memoryId: string;
+  keyPoints: string;
+  title?: string;
+  url?: string | null;
+  createdAt?: number;
+};
+
+export type AskResponsePayload = {
+  question: string;
+  answer: string;
+  status: "answered" | "no-context" | "model-unavailable" | "error";
+  context: AskContextItem[];
+  error?: string;
 };
 
 export type ProofreaderCorrection = {
@@ -53,17 +105,48 @@ export type ModelStatus = {
 
 export type ModelStatusMap = Record<ModelIdentifier, ModelStatus>;
 
+export type AutocompleteFieldType =
+  | "generic"
+  | "email"
+  | "document"
+  | "chat"
+  | "search"
+  | "code";
+
+export type AutocompleteContextEntry = {
+  id?: string;
+  title: string;
+  summary: string;
+  source: "session" | "memory";
+  url?: string;
+  timestamp?: number;
+};
+
 export type CompletionRequestPayload = {
   requestId: string;
   fieldId: string;
   text: string;
   caretIndex: number;
+  fieldType: AutocompleteFieldType;
+  fieldLabel?: string | null;
+  placeholder?: string | null;
+  surroundingText?: {
+    before: string;
+    after: string;
+  };
 };
 
 export type CompletionResultPayload = {
   requestId: string;
   suggestion: string | null;
   error?: string;
+  metadata?: {
+    source?: "model" | "fallback";
+    fieldType?: AutocompleteFieldType;
+    dropReason?: string;
+  };
+  contextEntries?: AutocompleteContextEntry[];
+  contextSummary?: string | null;
 };
 
 export type FieldContentPayload = {
@@ -79,6 +162,9 @@ export type AutocompleteSuggestion = {
   fieldId: string;
   caretIndex: number;
   completionText: string;
+  generatedAt?: number;
+  contextEntries?: AutocompleteContextEntry[];
+  strategy?: "model" | "fallback";
 };
 
 export type AutocompleteState = {
@@ -88,5 +174,31 @@ export type AutocompleteState = {
   suggestion: AutocompleteSuggestion | null;
   fieldPreview: string | null;
   error?: string | null;
+  contextSummary?: string | null;
+  updatedAt: number;
+};
+
+export type DiagnosticsSettings = {
+  verboseLogging: boolean;
+  trackMetrics: boolean;
+};
+
+export type DiagnosticsMetrics = {
+  completionRequested: number;
+  completionSucceeded: number;
+  completionFailed: number;
+  completionTimeouts: number;
+  completionDroppedSanitized: number;
+  completionDroppedDuplicate: number;
+  fallbackCompletions: number;
+  rankingRequests: number;
+  rankingFailures: number;
+  proofreaderRequests: number;
+  proofreaderFailures: number;
+};
+
+export type DiagnosticsSnapshot = {
+  settings: DiagnosticsSettings;
+  metrics: DiagnosticsMetrics;
   updatedAt: number;
 };

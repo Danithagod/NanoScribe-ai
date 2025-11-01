@@ -75,6 +75,7 @@ export function updateModelStatus(
     [id]: next,
   };
 
+  // Always broadcast status changes immediately
   emitChange();
 }
 

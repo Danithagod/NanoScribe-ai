@@ -1,3 +1,4 @@
+<!-- markdownlint-disable -->
 Writing Assistance APIs Model Usage Summary
 
 Examples

@@ -2,7 +2,7 @@
 
 import { updateModelStatus } from "./model-status";
 
-type SummarizerAvailabilityState = "readily" | "after-download" | "unavailable" | "unknown";
+type SummarizerAvailabilityState = "available" | "downloadable" | "downloading" | "unavailable" | "unknown";
 
 type ModernSummarizerHandle = {
   summarizeStreaming: (text: string, options?: { context?: string }) => Promise<ReadableStream>;
@@ -90,9 +90,11 @@ export async function isSummarizerReady(): Promise<boolean> {
     updateModelStatus("summarizer", {
       state: "unavailable",
       progress: 0,
-      message: "Summarizer API not available.",
+      message: "Chrome AI Summarizer API not available. Using fallback summarization.",
     });
-    return false;
+    // Always return true for fallback mode - we can always summarize with basic text processing
+    console.info("[NanoScribe] Summarizer API not available, but fallback summarization is ready");
+    return true;
   }
 
   try {
@@ -100,13 +102,19 @@ export async function isSummarizerReady(): Promise<boolean> {
 
     if (variant.kind === "modern") {
       const availability = await variant.factory.availability({ ...MODERN_AVAILABILITY_OPTIONS });
-      if (availability === "readily") {
+      if (availability === "available") {
         updateModelStatus("summarizer", { state: "ready", progress: 1, message: "Summarizer ready." });
-      } else if (availability === "after-download") {
+      } else if (availability === "downloading") {
         updateModelStatus("summarizer", {
           state: "downloading",
           progress: 0,
           message: "Summarizer downloading…",
+        });
+      } else if (availability === "downloadable") {
+        updateModelStatus("summarizer", {
+          state: "checking",
+          progress: 0,
+          message: "Summarizer model available for download.",
         });
       } else {
         updateModelStatus("summarizer", {
@@ -115,12 +123,18 @@ export async function isSummarizerReady(): Promise<boolean> {
           message: `Summarizer unavailable (${availability}).`,
         });
       }
-      return availability === "readily";
+      return availability === "available";
     }
 
     const availability = await variant.factory.availability();
-    if (availability === "readily") {
+    if (availability === "available") {
       updateModelStatus("summarizer", { state: "ready", progress: 1, message: "Summarizer ready." });
+    } else if (availability === "downloadable" || availability === "downloading") {
+      updateModelStatus("summarizer", {
+        state: "downloading",
+        progress: 0,
+        message: `Legacy summarizer ${availability === "downloadable" ? "requires download" : "is downloading"}.`,
+      });
     } else {
       updateModelStatus("summarizer", {
         state: "unavailable",
@@ -128,7 +142,7 @@ export async function isSummarizerReady(): Promise<boolean> {
         message: `Summarizer unavailable (${availability}).`,
       });
     }
-    return availability === "readily";
+    return availability === "available";
   } catch (error) {
     console.warn("[NanoScribe] Summarizer availability check failed", error);
     updateModelStatus("summarizer", {
@@ -136,7 +150,8 @@ export async function isSummarizerReady(): Promise<boolean> {
       progress: 0,
       message: error instanceof Error ? error.message : String(error),
     });
-    return false;
+    // Return true for fallback mode even if AI check fails
+    return true;
   }
 }
 
@@ -146,22 +161,25 @@ export async function generateKeyPointSummary(text: string): Promise<string | nu
     updateModelStatus("summarizer", {
       state: "unavailable",
       progress: 0,
-      message: "Summarizer API not available.",
+      message: "Chrome AI Summarizer API not available. Using fallback summarization.",
     });
-    return null;
+
+    // Use fallback summarization when AI API is not available
+    console.info("[NanoScribe] Using fallback summarization (Chrome AI API not available)");
+    return fallbackSummarize(text);
   }
 
   try {
     if (variant.kind === "modern") {
       const availability = await variant.factory.availability({ ...MODERN_AVAILABILITY_OPTIONS });
-      if (availability !== "readily") {
-        console.info("[NanoScribe] Summarizer not ready:", availability);
+      if (availability !== "available") {
+        console.info("[NanoScribe] Modern summarizer not ready:", availability);
         updateModelStatus("summarizer", {
-          state: availability === "after-download" ? "downloading" : "unavailable",
-          progress: availability === "after-download" ? 0 : 0,
-          message: `Summarizer not ready (${availability}).`,
+          state: availability === "downloading" || availability === "downloadable" ? "downloading" : "unavailable",
+          progress: 0,
+          message: `Modern summarizer not ready (${availability}). Using fallback.`,
         });
-        return null;
+        return fallbackSummarize(text);
       }
 
       let abortController: AbortController | null = null;
@@ -173,10 +191,19 @@ export async function generateKeyPointSummary(text: string): Promise<string | nu
           message: "Creating summarizer session…",
         });
 
+type DownloadProgressEvent = {
+  loaded: number;
+  total?: number;
+};
+
+type MonitorHandle = {
+  addEventListener: (type: string, listener: (event: DownloadProgressEvent) => void) => void;
+};
+
         const summarizer = await variant.factory.create({
           ...MODERN_CREATE_OPTIONS,
-          monitor(monitorHandle: { addEventListener: (type: string, listener: (event: any) => void) => void }) {
-            monitorHandle.addEventListener("downloadprogress", (event: { loaded: number }) => {
+          monitor(monitorHandle: MonitorHandle) {
+            monitorHandle.addEventListener("downloadprogress", (event: DownloadProgressEvent) => {
               console.debug(`[NanoScribe] Summarizer download ${(event.loaded * 100).toFixed(1)}%`);
               updateModelStatus("summarizer", {
                 state: "downloading",
@@ -212,14 +239,14 @@ export async function generateKeyPointSummary(text: string): Promise<string | nu
     }
 
     const availability = await variant.factory.availability();
-    if (availability !== "readily") {
-      console.info("[NanoScribe] Summarizer not ready:", availability);
+    if (availability !== "available") {
+      console.info("[NanoScribe] Legacy summarizer not ready:", availability);
       updateModelStatus("summarizer", {
-        state: "unavailable",
+        state: availability === "downloading" || availability === "downloadable" ? "downloading" : "unavailable",
         progress: 0,
-        message: `Summarizer not ready (${availability}).`,
+        message: `Legacy summarizer not ready (${availability}). Using fallback.`,
       });
-      return null;
+      return fallbackSummarize(text);
     }
 
     updateModelStatus("summarizer", {
@@ -271,5 +298,41 @@ export async function generateKeyPointSummary(text: string): Promise<string | nu
     });
   }
 
-  return null;
+  // Always fallback to basic summarization if AI fails
+  console.info("[NanoScribe] Falling back to basic text summarization");
+  return fallbackSummarize(text);
+}
+
+// Enhanced fallback summarization
+function fallbackSummarize(text: string): string {
+  console.info("[NanoScribe] Using enhanced fallback summarization");
+
+  // Remove extra whitespace and normalize
+  const cleanText = text.trim().replace(/\s+/g, ' ');
+
+  if (cleanText.length === 0) {
+    return "No content to summarize.";
+  }
+
+  // Split into sentences
+  const sentences = cleanText
+    .split(/(?<=[.!?])\s+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 10) // Filter very short sentences
+    .slice(0, 5); // Take first 5 meaningful sentences
+
+  if (sentences.length === 0) {
+    // Fallback to first 200 characters
+    return cleanText.slice(0, 200) + (cleanText.length > 200 ? '...' : '');
+  }
+
+  // Create key points format
+  const keyPoints = sentences.map((sentence, index) => {
+    return `- ${sentence}`;
+  });
+
+  const summary = keyPoints.join('\n');
+  console.info(`[NanoScribe] Generated fallback summary: ${summary.length} characters, ${sentences.length} key points`);
+
+  return summary;
 }

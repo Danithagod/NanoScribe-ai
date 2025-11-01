@@ -1,3 +1,4 @@
+<!-- markdownlint-disable -->
 Proofreader API Model Usage Summary
 
 Examples

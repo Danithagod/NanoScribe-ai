@@ -1,2 +1,12 @@
-- [ ] Fix proofreader 
-    - [ ] 
+<!-- markdownlint-disable -->
+- [-] Fix proofreader to highlight the text that is being corrected using the function `highlightText` 
+    - [ ] more robust chunking method for handling web summaries
+    - [-] pass different system prompt for contextaware and non-contextaware mode
+    - [ ] section pased chunking for long pages with max chunk size and summary of the section 
+    - [-] search memories 
+    - [-] readability and webpage scraping is breaking the ui/layput of the page which degrades UX please suggest a fix
+    - [ ] improve autocomplete system prompt and context window
+    - [ ] summarizer need to capture more data and increase summary length
+    - [-] ADD loading states to the search function
+    - [-] add a toast for summarisation states
+    - [ ] improve UI to show and tell shortcuts and usage 
